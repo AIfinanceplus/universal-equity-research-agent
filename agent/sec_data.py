@@ -211,6 +211,24 @@ def _latest_filing(rows: list[dict], forms: set[str]) -> dict | None:
     )
 
 
+def _latest_registration_filing(rows: list[dict]) -> dict | None:
+    candidates = [
+        r for r in rows
+        if r.get("form") in REGISTRATION_FORMS
+        and r.get("accession")
+        and r.get("primary_document")
+    ]
+    if not candidates:
+        return None
+    return max(
+        candidates,
+        key=lambda r: (
+            r.get("filing_date", ""),
+            int(str(r.get("form", "")).endswith("/A")),
+        ),
+    )
+
+
 def filing_targets(submissions: dict) -> dict:
     rows = _submission_rows(submissions)
     annual = _latest_filing(rows, ANNUAL_FORMS)
@@ -218,9 +236,11 @@ def filing_targets(submissions: dict) -> dict:
     if annual:
         quarters = [r for r in quarters if r["report_date"] > annual["report_date"]]
     quarterly = _latest_filing(quarters, QUARTERLY_FORMS) if quarters else None
+    registration = _latest_registration_filing(rows)
     return {
         "annual": annual,
         "quarterly": quarterly,
+        "registration": registration,
         "annual_source": "periodic_report" if annual else "",
     }
 
@@ -264,17 +284,162 @@ def _candidate_facts(companyfacts: dict, concepts: list[tuple[str, str]], unit: 
     return out
 
 
+def _local_name(tag) -> str:
+    name = str(getattr(tag, "name", "") or "").lower()
+    return name.split(":")[-1]
+
+
+def _tag_attr(tag, name: str):
+    attrs = getattr(tag, "attrs", {}) or {}
+    return attrs.get(name) or attrs.get(name.lower()) or attrs.get(name.upper())
+
+
+def _parse_ix_numeric(tag) -> float | None:
+    nil_value = str(
+        _tag_attr(tag, "xsi:nil")
+        or _tag_attr(tag, "nil")
+        or ""
+    ).lower()
+    if nil_value in {"true", "1"}:
+        return None
+
+    raw = tag.get_text("", strip=True)
+    if not raw or raw.strip() in {"-", "—", "–"}:
+        return None
+
+    negative_parentheses = raw.strip().startswith("(") and raw.strip().endswith(")")
+    cleaned = (
+        raw.replace(",", "")
+        .replace("$", "")
+        .replace("−", "-")
+        .replace("—", "-")
+        .replace("–", "-")
+        .strip()
+    )
+    cleaned = re.sub(r"[^0-9.\-]", "", cleaned)
+    if cleaned in {"", "-", ".", "-."}:
+        return None
+
+    try:
+        value = float(cleaned)
+    except ValueError:
+        return None
+
+    scale_raw = _tag_attr(tag, "scale")
+    try:
+        scale = int(scale_raw) if scale_raw not in (None, "") else 0
+    except (TypeError, ValueError):
+        scale = 0
+    value *= 10 ** scale
+
+    sign = str(_tag_attr(tag, "sign") or "").strip()
+    if sign == "-" and value > 0:
+        value = -value
+    elif negative_parentheses and sign != "-" and value > 0:
+        value = -value
+
+    return value
+
+
+def _parse_inline_registration_companyfacts(html: str, filing: dict) -> dict:
+    """Parse company-level monetary facts from an inline-XBRL S-1/F-1 document."""
+
+    soup = BeautifulSoup(html, "html.parser")
+    contexts: dict[str, dict] = {}
+
+    for context in soup.find_all(lambda tag: _local_name(tag) == "context"):
+        context_id = str(_tag_attr(context, "id") or "").strip()
+        if not context_id:
+            continue
+
+        has_dimensions = context.find(
+            lambda tag: _local_name(tag) in {"explicitmember", "typedmember"}
+        ) is not None
+        if has_dimensions:
+            continue
+
+        start_tag = context.find(lambda tag: _local_name(tag) == "startdate")
+        end_tag = context.find(lambda tag: _local_name(tag) == "enddate")
+        if not start_tag or not end_tag:
+            continue
+
+        start = start_tag.get_text(strip=True)
+        end = end_tag.get_text(strip=True)
+        if not _to_date(start) or not _to_date(end):
+            continue
+
+        contexts[context_id] = {
+            "start": start,
+            "end": end,
+        }
+
+    allowed = {
+        (namespace.lower(), concept)
+        for namespace, concept in (
+            REVENUE_CONCEPTS
+            + OCF_CONCEPTS
+            + CAPEX_CONCEPTS
+        )
+    }
+    parsed = {"facts": {}}
+
+    for tag in soup.find_all(lambda item: _local_name(item) == "nonfraction"):
+        qname = str(_tag_attr(tag, "name") or "")
+        if ":" not in qname:
+            continue
+
+        namespace, concept = qname.split(":", 1)
+        namespace = namespace.lower()
+        if (namespace, concept) not in allowed:
+            continue
+
+        unit_ref = str(_tag_attr(tag, "unitref") or "")
+        if unit_ref and "usd" not in unit_ref.lower():
+            continue
+
+        context_ref = str(_tag_attr(tag, "contextref") or "")
+        context = contexts.get(context_ref)
+        if not context:
+            continue
+
+        value = _parse_ix_numeric(tag)
+        if value is None:
+            continue
+
+        fact = {
+            "val": value,
+            "start": context["start"],
+            "end": context["end"],
+            "filed": filing.get("filing_date", ""),
+            "form": filing.get("form", ""),
+            "accn": filing.get("accession", ""),
+        }
+
+        concept_data = (
+            parsed["facts"]
+            .setdefault(namespace, {})
+            .setdefault(concept, {"units": {"USD": []}})
+        )
+        concept_data["units"]["USD"].append(fact)
+
+    return parsed
+
+
+def _registration_companyfacts_from_filing(cik_int: int, filing: dict | None) -> dict:
+    url = _filing_document_url(cik_int, filing)
+    if not url:
+        return {"facts": {}}
+    return _parse_inline_registration_companyfacts(
+        _get_text(url),
+        filing or {},
+    )
+
+
 def _registration_annual_target(
     companyfacts: dict,
     quarterly_target: dict | None = None,
 ) -> dict | None:
-    """Find the newest complete audited-style annual period in an IPO registration statement.
-
-    Newly public issuers can have a valid S-1/F-1 with audited historical annual
-    financials before they have filed their first 10-K/20-F. Company Facts preserves
-    those registration-statement XBRL facts, so use the latest annual period that is
-    simultaneously available for Revenue, OCF and CapEx.
-    """
+    """Find the newest complete annual period disclosed in an S-1/F-1 data set."""
 
     metric_sets = []
     cutoff = _to_date((quarterly_target or {}).get("report_date"))
@@ -532,12 +697,29 @@ def load_sec_financial_snapshot(ticker: str) -> dict:
     companyfacts = get_companyfacts(cik)
     targets = filing_targets(submissions)
     annual_target, quarterly_target = targets["annual"], targets["quarterly"]
+    registration_companyfacts = None
 
     if not annual_target:
         annual_target = _registration_annual_target(companyfacts, quarterly_target)
-        if annual_target:
-            targets["annual"] = annual_target
-            targets["annual_source"] = "registration_statement"
+
+    if not annual_target and targets.get("registration"):
+        registration_companyfacts = _registration_companyfacts_from_filing(
+            cik_int,
+            targets["registration"],
+        )
+        annual_target = _registration_annual_target(
+            registration_companyfacts,
+            quarterly_target,
+        )
+
+    if annual_target:
+        targets["annual"] = annual_target
+        if annual_target.get("source") == "registration_statement":
+            targets["annual_source"] = (
+                "registration_statement_inline_xbrl"
+                if registration_companyfacts is not None
+                else "registration_statement_companyfacts"
+            )
 
     if not annual_target:
         raise RuntimeError(
@@ -547,9 +729,40 @@ def load_sec_financial_snapshot(ticker: str) -> dict:
     revenue = _select_metric(companyfacts, REVENUE_CONCEPTS, cik_int, annual_target, quarterly_target)
     ocf = _select_metric(companyfacts, OCF_CONCEPTS, cik_int, annual_target, quarterly_target)
     capex = _select_metric(companyfacts, CAPEX_CONCEPTS, cik_int, annual_target, quarterly_target, True)
+
+    if registration_companyfacts is not None:
+        registration_revenue = _select_metric(
+            registration_companyfacts,
+            REVENUE_CONCEPTS,
+            cik_int,
+            annual_target,
+            None,
+        )
+        registration_ocf = _select_metric(
+            registration_companyfacts,
+            OCF_CONCEPTS,
+            cik_int,
+            annual_target,
+            None,
+        )
+        registration_capex = _select_metric(
+            registration_companyfacts,
+            CAPEX_CONCEPTS,
+            cik_int,
+            annual_target,
+            None,
+            True,
+        )
+        if registration_revenue.get("annual"):
+            revenue["annual"] = registration_revenue["annual"]
+        if registration_ocf.get("annual"):
+            ocf["annual"] = registration_ocf["annual"]
+        if registration_capex.get("annual"):
+            capex["annual"] = registration_capex["annual"]
+
     shares = _latest_shares(companyfacts, cik_int)
     if not shares or float(shares.get("shares", 0) or 0) <= 0:
-        shares = _cover_shares(cik_int, quarterly_target or annual_target)
+        shares = _cover_shares(cik_int, quarterly_target or targets.get("registration") or annual_target)
 
     ar, ao, ac = _value_b(revenue, "annual"), _value_b(ocf, "annual"), _value_b(capex, "annual")
     cr, co, cc = _value_b(revenue, "current_ytd"), _value_b(ocf, "current_ytd"), _value_b(capex, "current_ytd")
@@ -590,6 +803,15 @@ def load_sec_financial_snapshot(ticker: str) -> dict:
         {"title": "SEC EDGAR Submissions", "url": submissions_url},
     ]
     seen = {s["url"] for s in sources}
+
+    registration_url = _filing_document_url(cik_int, targets.get("registration"))
+    if registration_url and registration_url not in seen:
+        seen.add(registration_url)
+        sources.append({
+            "title": "SEC IPO Registration Statement",
+            "url": registration_url,
+        })
+
     for metric_name, metric in (("Revenue", revenue), ("Operating Cash Flow", ocf), ("CapEx", capex)):
         for period in ("annual", "current_ytd", "prior_ytd"):
             item = metric.get(period)
