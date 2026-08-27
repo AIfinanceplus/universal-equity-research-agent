@@ -165,6 +165,18 @@ class ResearchState(TypedDict):
     merged_sources: list[dict]
     evidence_summary: str
     evidence_completeness: float
+    strategy_metrics: dict
+    strategy_graham: dict
+    strategy_buffett: dict
+    strategy_lynch: dict
+    strategy_fisher: dict
+    strategy_greenblatt: dict
+    strategy_hohn: dict
+    strategy_druckenmiller: dict
+    strategy_tepper: dict
+    strategy_klarman: dict
+    strategy_ackman_smith: dict
+    strategy_screening: dict
     valuation_assumptions: dict
     assumption_summary: str
     valuation_result: dict
