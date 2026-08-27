@@ -21,18 +21,6 @@ if ! grep -Eq '^OPENAI_API_KEY=.+$' .env; then
   exit 1
 fi
 
-if ! grep -Eq '^SEC_USER_AGENT=.+@.+$' .env; then
-  echo
-  echo "SEC_USER_AGENT is missing."
-  echo
-  echo "SEC requires a declared User-Agent for scripted EDGAR access."
-  echo "Add a real contact in .env, for example:"
-  echo
-  echo "SEC_USER_AGENT=YourName your.email@example.com"
-  echo
-  exit 1
-fi
-
 echo
 echo "Starting:"
 echo "  http://127.0.0.1:8765"
