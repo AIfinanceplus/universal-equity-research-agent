@@ -17,7 +17,8 @@ def main():
         "primary_document": "spcx-20260630.htm",
     }
 
-    # Shape mirrors the ordinary (non-iXBRL) tables in the SpaceX S-1/A.
+    # Shape mirrors the ordinary (non-iXBRL) tables in the SpaceX S-1/A,
+    # including the explicit '(in millions)' unit rows shown by SEC.
     html = """
     <html><body>
       <h2>Consolidated Results of Operations</h2>
@@ -33,6 +34,7 @@ def main():
       <table>
         <tr><th>Three Months Ended March 31,</th><th colspan="3">Year Ended December 31,</th></tr>
         <tr><th>2026</th><th>2025</th><th>2025</th><th>2024</th><th>2023</th></tr>
+        <tr><th colspan="5">(in millions)</th></tr>
         <tr><td>Net cash provided by operating activities</td><td>$1,047</td><td>$727</td><td>$6,785</td><td>$5,776</td><td>$4,520</td></tr>
       </table>
 
@@ -40,6 +42,7 @@ def main():
       <table>
         <tr><th>Three Months Ended March 31,</th><th colspan="3">Year Ended December 31,</th></tr>
         <tr><th>2026</th><th>2025</th><th>2025</th><th>2024</th><th>2023</th></tr>
+        <tr><th colspan="5">(in millions)</th></tr>
         <tr><td>Space</td><td>$1,052</td><td>$759</td><td>$3,832</td><td>$2,032</td><td>$1,497</td></tr>
         <tr><td>Connectivity</td><td>1,332</td><td>814</td><td>4,178</td><td>3,498</td><td>2,455</td></tr>
         <tr><td>AI</td><td>7,723</td><td>2,567</td><td>12,727</td><td>5,633</td><td>463</td></tr>
