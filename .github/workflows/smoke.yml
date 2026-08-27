@@ -19,11 +19,12 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements.txt
       - name: Python syntax check
-        run: python -m py_compile main.py ui_server.py agent/*.py router_smoke_test.py valuation_smoke_test.py test_sec_selector.py graph_structure_smoke_test.py ui_protocol_smoke_test.py
+        run: python -m py_compile main.py ui_server.py agent/*.py router_smoke_test.py valuation_smoke_test.py test_sec_selector.py graph_structure_smoke_test.py ui_protocol_smoke_test.py strategy_screening_smoke_test.py
       - name: Frontend JavaScript syntax
         run: |
           node --check frontend/vnext.js
           node --check frontend/runtime_patch.js
+          node --check frontend/strategy_screening.js
       - name: Router circuit breaker
         run: python router_smoke_test.py
       - name: Valuation verification
@@ -34,3 +35,5 @@ jobs:
         run: python graph_structure_smoke_test.py
       - name: UI graph protocol
         run: python ui_protocol_smoke_test.py
+      - name: Investor strategy screening
+        run: python strategy_screening_smoke_test.py
