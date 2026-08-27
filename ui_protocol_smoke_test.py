@@ -9,7 +9,11 @@ def main():
 
     required = {
         "resolver", "planner", "research_dispatch", "fundamentals",
-        "market_data", "competition", "risk", "merge",
+        "market_data", "competition", "risk", "merge", "strategy_metrics",
+        "strategy_graham", "strategy_buffett", "strategy_lynch",
+        "strategy_fisher", "strategy_greenblatt", "strategy_hohn",
+        "strategy_druckenmiller", "strategy_tepper", "strategy_klarman",
+        "strategy_ackman_smith", "strategy_screening_hub",
         "assumption_builder", "valuation", "verification", "critic",
         "typed_router", "retry_fundamentals", "retry_market_data",
         "retry_competition", "retry_risk", "success_final",
@@ -23,11 +27,17 @@ def main():
         ("market_data", "merge"),
         ("competition", "merge"),
         ("risk", "merge"),
+        ("merge", "strategy_metrics"),
+        ("strategy_metrics", "strategy_graham"),
+        ("strategy_metrics", "strategy_ackman_smith"),
+        ("strategy_graham", "strategy_screening_hub"),
+        ("strategy_ackman_smith", "strategy_screening_hub"),
+        ("strategy_screening_hub", "assumption_builder"),
         ("typed_router", "retry_risk"),
         ("typed_router", "assumption_builder"),
         ("typed_router", "insufficient_final"),
     }:
-        assert pair in edge_pairs
+        assert pair in edge_pairs, pair
 
     assert all(edge.get("channels") for edge in GRAPH_EDGES)
     assert any("information" in edge["channels"] for edge in GRAPH_EDGES)
@@ -38,11 +48,12 @@ def main():
         {"x", "y", "description", "inputs", "outputs"}.issubset(node)
         for node in NODE_META
     )
-    assert meta["canvas"]["height"] > 1200
+    assert meta["canvas"]["height"] > 2000
+    assert meta["canvas"]["width"] >= 1800
 
     print(
-        "PASS: UI protocol exposes node-level graph, information flow, "
-        "logic flow and decision flow."
+        "PASS: UI protocol exposes node-level research, ten investor screens, "
+        "information flow, logic flow and decision flow."
     )
 
 
