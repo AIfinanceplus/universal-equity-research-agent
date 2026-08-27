@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Universal Equity Research Agent</title>
   <link rel="stylesheet" href="/static/vnext.css" />
+  <link rel="stylesheet" href="/static/strategy_screening.css" />
 </head>
 <body>
   <main class="page">
@@ -62,7 +63,7 @@
       </div>
 
       <div class="flow-legend">
-        <span><i class="legend-line info"></i>信息流：字段 / 证据 / 财务快照</span>
+        <span><i class="legend-line info"></i>信息流：字段 / 证据 / 财务快照 / 策略指标</span>
         <span><i class="legend-line logic"></i>逻辑流：执行 / fan-out / fan-in</span>
         <span><i class="legend-line decision"></i>决策流：Router 条件分支 / retry</span>
       </div>
@@ -101,7 +102,21 @@
     </section>
 
     <section class="panel">
-      <div class="section-head"><div><h2>结果</h2><span class="muted">数据 → 假设 → 估值 → 验证</span></div></div>
+      <div class="section-head">
+        <div>
+          <h2>10位投资大师策略筛选</h2>
+          <span class="muted">严格按你定义的规则执行；无法可靠判断的条件显示 UNKNOWN，而不是猜测。</span>
+        </div>
+      </div>
+      <div id="strategySummary" class="strategy-summary"></div>
+      <div id="strategyScreening" class="strategy-grid">
+        <div class="strategy-empty">等待 Strategy Screening Hub 完成…</div>
+      </div>
+      <div id="strategyMethodology" class="strategy-methodology"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head"><div><h2>结果</h2><span class="muted">数据 → 策略筛选 → 假设 → 估值 → 验证</span></div></div>
       <div id="metrics" class="metric-grid"></div>
       <div class="result-grid">
         <div><h3>估值情景</h3><div id="valuationBars" class="bars"></div></div>
@@ -112,5 +127,6 @@
   </main>
   <script src="/static/vnext.js"></script>
   <script src="/static/runtime_patch.js"></script>
+  <script src="/static/strategy_screening.js"></script>
 </body>
 </html>
