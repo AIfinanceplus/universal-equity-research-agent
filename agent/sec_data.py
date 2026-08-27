@@ -26,6 +26,7 @@ TIMEOUT_SECONDS = 25
 
 ANNUAL_FORMS = {"10-K", "10-K/A", "20-F", "20-F/A", "40-F", "40-F/A"}
 QUARTERLY_FORMS = {"10-Q", "10-Q/A"}
+REGISTRATION_FORMS = {"S-1", "S-1/A", "F-1", "F-1/A"}
 REVENUE_CONCEPTS = [
     ("us-gaap", "RevenueFromContractWithCustomerExcludingAssessedTax"),
     ("us-gaap", "Revenues"),
@@ -217,7 +218,11 @@ def filing_targets(submissions: dict) -> dict:
     if annual:
         quarters = [r for r in quarters if r["report_date"] > annual["report_date"]]
     quarterly = _latest_filing(quarters, QUARTERLY_FORMS) if quarters else None
-    return {"annual": annual, "quarterly": quarterly}
+    return {
+        "annual": annual,
+        "quarterly": quarterly,
+        "annual_source": "periodic_report" if annual else "",
+    }
 
 
 def _to_date(value: str | None):
@@ -259,10 +264,89 @@ def _candidate_facts(companyfacts: dict, concepts: list[tuple[str, str]], unit: 
     return out
 
 
+def _registration_annual_target(
+    companyfacts: dict,
+    quarterly_target: dict | None = None,
+) -> dict | None:
+    """Find the newest complete audited-style annual period in an IPO registration statement.
+
+    Newly public issuers can have a valid S-1/F-1 with audited historical annual
+    financials before they have filed their first 10-K/20-F. Company Facts preserves
+    those registration-statement XBRL facts, so use the latest annual period that is
+    simultaneously available for Revenue, OCF and CapEx.
+    """
+
+    metric_sets = []
+    cutoff = _to_date((quarterly_target or {}).get("report_date"))
+
+    for concepts in (REVENUE_CONCEPTS, OCF_CONCEPTS, CAPEX_CONCEPTS):
+        by_end: dict[str, list[dict]] = {}
+
+        for fact in _candidate_facts(companyfacts, concepts, "USD"):
+            if fact.get("form") not in REGISTRATION_FORMS:
+                continue
+
+            duration = _duration(fact)
+            end = _to_date(fact.get("end"))
+
+            if duration is None or not 270 <= duration <= 430 or not end:
+                continue
+
+            if cutoff and end >= cutoff:
+                continue
+
+            by_end.setdefault(fact.get("end", ""), []).append(fact)
+
+        metric_sets.append(by_end)
+
+    if not metric_sets or any(not item for item in metric_sets):
+        return None
+
+    common_ends = set(metric_sets[0])
+    for item in metric_sets[1:]:
+        common_ends &= set(item)
+
+    if not common_ends:
+        return None
+
+    report_date = max(common_ends)
+    candidate_facts = [
+        fact
+        for item in metric_sets
+        for fact in item.get(report_date, [])
+    ]
+
+    if not candidate_facts:
+        return None
+
+    anchor = max(
+        candidate_facts,
+        key=lambda fact: (
+            fact.get("filed", ""),
+            int(str(fact.get("form", "")).endswith("/A")),
+            int(bool(fact.get("accn"))),
+            -int(fact.get("_priority", 999)),
+        ),
+    )
+
+    return {
+        "form": anchor.get("form", ""),
+        "report_date": report_date,
+        "filing_date": anchor.get("filed", ""),
+        "accession": anchor.get("accn", ""),
+        "primary_document": "",
+        "source": "registration_statement",
+    }
+
+
 def _select_annual(facts: list[dict], target: dict):
     candidates = []
+    allowed_forms = set(ANNUAL_FORMS)
+    if target.get("source") == "registration_statement":
+        allowed_forms |= REGISTRATION_FORMS
+
     for fact in facts:
-        if fact.get("end") != target["report_date"] or fact.get("form") not in ANNUAL_FORMS:
+        if fact.get("end") != target["report_date"] or fact.get("form") not in allowed_forms:
             continue
         duration = _duration(fact)
         if duration is None or not 270 <= duration <= 430:
@@ -270,10 +354,11 @@ def _select_annual(facts: list[dict], target: dict):
         candidates.append((
             int(fact.get("accn") == target.get("accession")),
             fact.get("filed", ""),
+            int(str(fact.get("form", "")).endswith("/A")),
             -int(fact.get("_priority", 999)),
             fact,
         ))
-    return max(candidates, default=(None, None, None, None))[-1]
+    return max(candidates, default=(None, None, None, None, None))[-1]
 
 
 def _select_current_ytd(facts: list[dict], target: dict):
@@ -362,7 +447,7 @@ def _latest_shares(companyfacts: dict, cik_int: int):
     facts = _candidate_facts(companyfacts, SHARES_CONCEPTS, "shares")
     candidates = [
         f for f in facts
-        if f.get("form") in (ANNUAL_FORMS | QUARTERLY_FORMS) and _to_date(f.get("end"))
+        if f.get("form") in (ANNUAL_FORMS | QUARTERLY_FORMS | REGISTRATION_FORMS) and _to_date(f.get("end"))
     ]
     if not candidates:
         return None
@@ -447,8 +532,17 @@ def load_sec_financial_snapshot(ticker: str) -> dict:
     companyfacts = get_companyfacts(cik)
     targets = filing_targets(submissions)
     annual_target, quarterly_target = targets["annual"], targets["quarterly"]
+
     if not annual_target:
-        raise RuntimeError("No current annual filing target found in SEC Submissions")
+        annual_target = _registration_annual_target(companyfacts, quarterly_target)
+        if annual_target:
+            targets["annual"] = annual_target
+            targets["annual_source"] = "registration_statement"
+
+    if not annual_target:
+        raise RuntimeError(
+            "No annual financial baseline found in SEC periodic reports or IPO registration statements"
+        )
 
     revenue = _select_metric(companyfacts, REVENUE_CONCEPTS, cik_int, annual_target, quarterly_target)
     ocf = _select_metric(companyfacts, OCF_CONCEPTS, cik_int, annual_target, quarterly_target)
