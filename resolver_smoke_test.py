@@ -1,3 +1,13 @@
+import os
+
+# The resolver module constructs ChatOpenAI clients at import time.
+# This smoke test never sends a network request, so a dummy key is enough
+# to exercise the pure typo-guard helpers in CI.
+os.environ.setdefault(
+    "OPENAI_API_KEY",
+    "test-key-not-used",
+)
+
 from agent.resolver import (
     _damerau_levenshtein,
     _validate_resolved_result,
