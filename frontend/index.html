@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Universal Equity Research Agent</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/vnext.css" />
 </head>
 <body>
   <main class="page">
@@ -37,7 +37,6 @@
           <h2>Node-level Execution Graph</h2>
           <div class="muted">点击节点查看输入 / 输出；高亮边表示实时信息、控制或决策流。</div>
         </div>
-
         <div class="graph-toolbar">
           <div class="segmented" id="flowFilters">
             <button type="button" class="tool-button active" data-flow="all">All</button>
@@ -45,13 +44,11 @@
             <button type="button" class="tool-button" data-flow="logic">逻辑流</button>
             <button type="button" class="tool-button" data-flow="decision">决策流</button>
           </div>
-
           <div class="segmented">
             <button id="zoomOut" type="button" class="tool-button">−</button>
             <button id="zoomReset" type="button" class="tool-button">100%</button>
             <button id="zoomIn" type="button" class="tool-button">＋</button>
           </div>
-
           <div class="segmented">
             <select id="replaySpeed" class="speed-select" aria-label="Replay speed">
               <option value="0.5">0.5×</option>
@@ -77,7 +74,6 @@
             <div id="nodeLayer" class="node-layer"></div>
           </div>
         </div>
-
         <aside class="inspector">
           <div class="inspector-head">
             <div>
@@ -86,7 +82,6 @@
             </div>
             <span id="inspectorStatus" class="mini-badge idle">idle</span>
           </div>
-
           <div id="inspectorBody" class="inspector-body">
             <div class="empty-state">点击图中的任意 node，可查看职责、输入、输出、最新运行摘要与耗时。</div>
           </div>
@@ -96,54 +91,25 @@
 
     <section class="grid two process-grid">
       <div class="panel">
-        <div class="section-head">
-          <div>
-            <h2>Decision Trace</h2>
-            <span class="muted">Critic → Typed Router 的可解释决策</span>
-          </div>
-        </div>
+        <div class="section-head"><div><h2>Decision Trace</h2><span class="muted">Critic → Typed Router 的可解释决策</span></div></div>
         <div id="decisionCard" class="decision-card empty">尚未进入决策节点</div>
       </div>
-
       <div class="panel">
-        <div class="section-head">
-          <div>
-            <h2>Execution Timeline</h2>
-            <span class="muted">node / edge / decision 事件按真实顺序记录，可完成后重放</span>
-          </div>
-        </div>
+        <div class="section-head"><div><h2>Execution Timeline</h2><span class="muted">node / edge / decision 事件按真实顺序记录，可完成后重放</span></div></div>
         <div id="timeline" class="timeline"></div>
       </div>
     </section>
 
     <section class="panel">
-      <div class="section-head">
-        <div>
-          <h2>结果</h2>
-          <span class="muted">数据 → 假设 → 估值 → 验证</span>
-        </div>
-      </div>
-
+      <div class="section-head"><div><h2>结果</h2><span class="muted">数据 → 假设 → 估值 → 验证</span></div></div>
       <div id="metrics" class="metric-grid"></div>
-
       <div class="result-grid">
-        <div>
-          <h3>估值情景</h3>
-          <div id="valuationBars" class="bars"></div>
-        </div>
-        <div>
-          <h3>Verification</h3>
-          <div id="verificationCard" class="verification empty">尚未运行</div>
-        </div>
+        <div><h3>估值情景</h3><div id="valuationBars" class="bars"></div></div>
+        <div><h3>Verification</h3><div id="verificationCard" class="verification empty">尚未运行</div></div>
       </div>
-
-      <div class="final-answer-wrap">
-        <h3>最终研究结论</h3>
-        <pre id="finalAnswer" class="final-answer">等待研究完成…</pre>
-      </div>
+      <div class="final-answer-wrap"><h3>最终研究结论</h3><pre id="finalAnswer" class="final-answer">等待研究完成…</pre></div>
     </section>
   </main>
-
-  <script src="/static/app.js"></script>
+  <script src="/static/vnext.js"></script>
 </body>
 </html>
