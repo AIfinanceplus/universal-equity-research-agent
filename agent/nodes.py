@@ -452,28 +452,42 @@ def _message_text(response) -> str:
 
 def success_final_node(state: ResearchState):
     response = llm.invoke(f"""
-Write a concise professional equity-research conclusion for {state['company']} ({state['ticker']}).
-Use the verified Python numbers exactly. Bear/Base/Bull are research scenarios, not company forecasts.
-Do not call the simplified model a standard DCF. status=success means the pipeline passed, not that
-this stock must be bought.
-FINANCIAL: {state['financial_snapshot']}
-MARKET: {state['market_snapshot']}
-VALUATION: {state['valuation_summary']}
-VERIFICATION: {state['verification_summary']}
-COMPETITION: {state['competition_report']}
-RISK: {state['risk_report']}
+请始终使用简体中文输出最终股票研究结论。
+为 {state['company']}（{state['ticker']}）撰写一份简洁、专业、结构清晰的股票研究结论。
+所有已经由 Python 验证的数字必须原样使用，不得擅自改写或重新计算。
+Bear / Base / Bull 只是研究情景，不是公司指引或预测。
+不得把当前简化模型称为标准 DCF。
+status=success 仅表示研究流程和证据检查通过，不代表必须买入该股票。
+
+建议使用以下中文结构：
+1. 核心结论
+2. 基本面与现金流
+3. 当前估值与 Bear/Base/Bull 情景
+4. 竞争格局
+5. 主要风险
+6. 结论与仍需关注事项
+
+财务数据：{state['financial_snapshot']}
+市场数据：{state['market_snapshot']}
+估值：{state['valuation_summary']}
+验证结果：{state['verification_summary']}
+竞争：{state['competition_report']}
+风险：{state['risk_report']}
 """)
     return {"status": "success", "final_answer": _message_text(response)}
 
 
 def insufficient_final_node(state: ResearchState):
     response = llm.invoke(f"""
-Write the final unresolved-problems report for {state['company']} ({state['ticker']}).
-Only report unresolved blocker/major issues; distinguish data, math, model/assumption and evidence.
-Never claim Python was not run and do not force a buy/sell conclusion.
-VERIFICATION: {state['verification_summary']}
-ISSUES: {state['research_issues']}
-VALUATION: {state['valuation_summary']}
+请始终使用简体中文输出最终的“未解决问题报告”。
+对象：{state['company']}（{state['ticker']}）。
+只报告仍未解决的 blocker / major 问题，并明确区分：数据问题、数学问题、模型/假设问题、证据问题。
+如果某一类别已经通过，请明确写“未发现未解决的重大问题”。
+不得声称 Python 没有运行，也不要强行给出买入/卖出结论。
+
+验证结果：{state['verification_summary']}
+未解决问题：{state['research_issues']}
+估值：{state['valuation_summary']}
 """)
     return {"status": "insufficient_evidence", "final_answer": _message_text(response)}
 
