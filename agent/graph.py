@@ -7,11 +7,11 @@ from langgraph.graph import (
 from langgraph.types import RetryPolicy
 
 from agent.schemas import ResearchState
+from agent.market_node import market_data_node
 from agent.nodes import (
     planner_node,
     research_dispatch_node,
     fundamentals_node,
-    market_data_node,
     competition_node,
     risk_node,
     merge_evidence_node,
