@@ -2,86 +2,125 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent.routing import actionable_issues
+
 
 NODE_META = [
-    {"id": "resolver", "label": "Security Resolver", "phase": "identity", "kind": "deterministic+llm", "x": 80, "y": 60,
-     "description": "Resolve fuzzy company input into one canonical listed security.",
-     "inputs": ["user_query"], "outputs": ["company", "ticker", "exchange", "currency", "country"]},
-    {"id": "planner", "label": "Planner", "phase": "planning", "kind": "llm", "x": 340, "y": 60,
-     "description": "Create the research work plan.",
-     "inputs": ["company", "ticker"], "outputs": ["plan"]},
-    {"id": "research_dispatch", "label": "Research Dispatch", "phase": "orchestration", "kind": "deterministic", "x": 600, "y": 60,
-     "description": "Start the parallel research workstreams.",
-     "inputs": ["plan"], "outputs": ["attempt_count"]},
-    {"id": "fundamentals", "label": "Financial Data", "phase": "research", "kind": "sec+python", "x": 120, "y": 240,
+    {"id": "resolver", "label": "Security Resolver", "phase": "identity", "kind": "deterministic+llm", "x": 70, "y": 50,
+     "description": "Resolve fuzzy company input into one canonical listed security.", "inputs": ["user_query"], "outputs": ["company", "ticker", "exchange", "currency", "country"]},
+    {"id": "planner", "label": "Planner", "phase": "planning", "kind": "llm", "x": 340, "y": 50,
+     "description": "Create the research work plan.", "inputs": ["company", "ticker"], "outputs": ["plan"]},
+    {"id": "research_dispatch", "label": "Research Dispatch", "phase": "orchestration", "kind": "deterministic", "x": 610, "y": 50,
+     "description": "Start the parallel research workstreams.", "inputs": ["plan"], "outputs": ["attempt_count"]},
+
+    {"id": "fundamentals", "label": "Financial Data", "phase": "research", "kind": "sec+python", "x": 70, "y": 220,
      "description": "Pull SEC filings, build period-aligned TTM financials and canonical FCF.",
-     "inputs": ["ticker", "research_issues"],
-     "outputs": ["financial_snapshot", "financial_basis", "financial_period", "revenue", "operating_cash_flow", "capex", "free_cash_flow", "shares_outstanding"]},
-    {"id": "market_data", "label": "Market Data", "phase": "research", "kind": "search+llm", "x": 400, "y": 240,
+     "inputs": ["ticker", "research_issues"], "outputs": ["financial_snapshot", "financial_basis", "financial_period", "revenue", "operating_cash_flow", "capex", "free_cash_flow", "shares_outstanding"]},
+    {"id": "market_data", "label": "Market Data", "phase": "research", "kind": "search+llm", "x": 340, "y": 220,
      "description": "Resolve current price, market cap, as-of date and public provenance.",
-     "inputs": ["company", "ticker", "shares_outstanding", "research_issues"],
-     "outputs": ["market_snapshot", "market_price", "market_cap", "market_cap_date"]},
-    {"id": "competition", "label": "Competition", "phase": "research", "kind": "search+llm", "x": 680, "y": 240,
+     "inputs": ["company", "ticker", "shares_outstanding", "research_issues"], "outputs": ["market_snapshot", "market_price", "market_cap", "market_cap_date"]},
+    {"id": "competition", "label": "Competition", "phase": "research", "kind": "search+llm", "x": 610, "y": 220,
      "description": "Research competitive position, peers and evidence.",
      "inputs": ["company", "ticker", "research_issues"], "outputs": ["competition_report", "competition_sources"]},
-    {"id": "risk", "label": "Risk", "phase": "research", "kind": "search+llm", "x": 960, "y": 240,
+    {"id": "risk", "label": "Risk", "phase": "research", "kind": "search+llm", "x": 880, "y": 220,
      "description": "Research material business, regulatory, technology and capital risks.",
      "inputs": ["company", "ticker", "research_issues"], "outputs": ["risk_report", "risk_sources"]},
-    {"id": "merge", "label": "Evidence Hub", "phase": "synthesis", "kind": "python", "x": 540, "y": 430,
+
+    {"id": "merge", "label": "Evidence Hub", "phase": "synthesis", "kind": "python", "x": 475, "y": 390,
      "description": "Single fan-in barrier. Merge evidence, preserve canonical data and compute completeness.",
      "inputs": ["financial_snapshot", "market_snapshot", "competition_report", "risk_report"],
      "outputs": ["merged_sources", "evidence_summary", "evidence_completeness", "market_cap", "market_snapshot"]},
-    {"id": "assumption_builder", "label": "Assumption Builder", "phase": "modeling", "kind": "llm", "x": 540, "y": 600,
+
+    {"id": "strategy_metrics", "label": "Strategy Metrics", "phase": "screening-data", "kind": "sec+python", "x": 475, "y": 550,
+     "description": "Build a shared SEC historical-metrics profile for all investor screens.",
+     "inputs": ["ticker", "market_price", "market_cap", "shares_outstanding"], "outputs": ["strategy_metrics"]},
+
+    {"id": "strategy_graham", "label": "Graham", "phase": "strategy-screen", "kind": "python", "x": 60, "y": 720,
+     "description": "Benjamin Graham defensive screen using the user-defined rules.", "inputs": ["strategy_metrics"], "outputs": ["strategy_graham"]},
+    {"id": "strategy_buffett", "label": "Buffett", "phase": "strategy-screen", "kind": "python", "x": 290, "y": 720,
+     "description": "Warren Buffett quality/value screen using the user-defined rules.", "inputs": ["strategy_metrics"], "outputs": ["strategy_buffett"]},
+    {"id": "strategy_lynch", "label": "Lynch", "phase": "strategy-screen", "kind": "python", "x": 520, "y": 720,
+     "description": "Peter Lynch growth-at-a-reasonable-price screen.", "inputs": ["strategy_metrics"], "outputs": ["strategy_lynch"]},
+    {"id": "strategy_fisher", "label": "Fisher", "phase": "strategy-screen", "kind": "python", "x": 750, "y": 720,
+     "description": "Philip Fisher quantitative proxy screen.", "inputs": ["strategy_metrics"], "outputs": ["strategy_fisher"]},
+    {"id": "strategy_greenblatt", "label": "Greenblatt", "phase": "strategy-screen", "kind": "python", "x": 980, "y": 720,
+     "description": "Joel Greenblatt Magic Formula screen with explicit unknowns when cross-sectional ranks are unavailable.", "inputs": ["strategy_metrics"], "outputs": ["strategy_greenblatt"]},
+
+    {"id": "strategy_hohn", "label": "Chris Hohn / TCI", "phase": "strategy-screen", "kind": "python", "x": 60, "y": 870,
+     "description": "TCI-style quality, capital efficiency and moat proxy screen.", "inputs": ["strategy_metrics"], "outputs": ["strategy_hohn"]},
+    {"id": "strategy_druckenmiller", "label": "Druckenmiller", "phase": "strategy-screen", "kind": "python", "x": 290, "y": 870,
+     "description": "Dynamic momentum/estimate-revision framework; unavailable dynamic fields stay UNKNOWN.", "inputs": ["strategy_metrics"], "outputs": ["strategy_druckenmiller"]},
+    {"id": "strategy_tepper", "label": "Tepper", "phase": "strategy-screen", "kind": "python", "x": 520, "y": 870,
+     "description": "Deep-value/event-driven framework; event and historical-percentile fields stay explicit.", "inputs": ["strategy_metrics"], "outputs": ["strategy_tepper"]},
+    {"id": "strategy_klarman", "label": "Klarman", "phase": "strategy-screen", "kind": "python", "x": 750, "y": 870,
+     "description": "Margin-of-safety framework; liquidation/NPV/catalyst requirements are not guessed.", "inputs": ["strategy_metrics"], "outputs": ["strategy_klarman"]},
+    {"id": "strategy_ackman_smith", "label": "Ackman / Smith", "phase": "strategy-screen", "kind": "python", "x": 980, "y": 870,
+     "description": "Quality compounder screen combining the user-defined Ackman and Terry Smith criteria.", "inputs": ["strategy_metrics"], "outputs": ["strategy_ackman_smith"]},
+
+    {"id": "strategy_screening_hub", "label": "Strategy Screening Hub", "phase": "strategy-summary", "kind": "python", "x": 475, "y": 1030,
+     "description": "Fan-in all ten screens and rank the closest matches without hiding missing data.",
+     "inputs": ["strategy_graham", "strategy_buffett", "strategy_lynch", "strategy_fisher", "strategy_greenblatt", "strategy_hohn", "strategy_druckenmiller", "strategy_tepper", "strategy_klarman", "strategy_ackman_smith"],
+     "outputs": ["strategy_screening"]},
+
+    {"id": "assumption_builder", "label": "Assumption Builder", "phase": "modeling", "kind": "llm", "x": 475, "y": 1190,
      "description": "Build evidence-backed Bear/Base/Bull growth, discount and exit-multiple assumptions.",
      "inputs": ["revenue", "free_cash_flow", "market_cap", "competition_report", "risk_report", "research_issues"],
      "outputs": ["valuation_assumptions", "assumption_summary"]},
-    {"id": "valuation", "label": "Python Valuation", "phase": "modeling", "kind": "python", "x": 540, "y": 770,
+    {"id": "valuation", "label": "Python Valuation", "phase": "modeling", "kind": "python", "x": 475, "y": 1350,
      "description": "Run deterministic 5-year FCF scenario valuation.",
-     "inputs": ["revenue", "free_cash_flow", "market_cap", "valuation_assumptions"],
-     "outputs": ["valuation_result", "valuation_summary"]},
-    {"id": "verification", "label": "Deterministic Verification", "phase": "verification", "kind": "python", "x": 540, "y": 940,
+     "inputs": ["revenue", "free_cash_flow", "market_cap", "valuation_assumptions"], "outputs": ["valuation_result", "valuation_summary"]},
+    {"id": "verification", "label": "Deterministic Verification", "phase": "verification", "kind": "python", "x": 475, "y": 1510,
      "description": "Independently recompute data alignment, valuation math and model structure.",
-     "inputs": ["financial_basis", "financial_period", "market_snapshot", "valuation_result", "valuation_assumptions"],
-     "outputs": ["deterministic_verification"]},
-    {"id": "critic", "label": "LLM Critic", "phase": "verification", "kind": "llm", "x": 540, "y": 1110,
+     "inputs": ["financial_basis", "financial_period", "market_snapshot", "valuation_result", "valuation_assumptions"], "outputs": ["deterministic_verification"]},
+    {"id": "critic", "label": "LLM Critic", "phase": "verification", "kind": "llm", "x": 475, "y": 1670,
      "description": "Critique source quality and unresolved material issues without overriding deterministic checks.",
      "inputs": ["deterministic_verification", "valuation_summary", "competition_report", "risk_report"],
      "outputs": ["research_issues", "needs_revision", "revision_count", "issue_attempts", "stagnant_revision_count"]},
-    {"id": "typed_router", "label": "Typed Issue Router", "phase": "decision", "kind": "python", "x": 540, "y": 1280,
+    {"id": "typed_router", "label": "Typed Issue Router", "phase": "decision", "kind": "python", "x": 475, "y": 1830,
      "description": "Deterministically select success, bounded targeted retry, or insufficient evidence.",
      "inputs": ["research_issues", "revision_count", "issue_attempts", "stagnant_revision_count"], "outputs": ["route"]},
-    {"id": "retry_fundamentals", "label": "Retry Financial", "phase": "retry", "kind": "sec+python", "x": 980, "y": 480,
-     "description": "Targeted financial-data correction only.",
-     "inputs": ["financial_data issues", "last-known-good financial state"], "outputs": ["corrected financial fields"]},
-    {"id": "retry_market_data", "label": "Retry Market", "phase": "retry", "kind": "search+llm", "x": 1180, "y": 610,
-     "description": "Targeted market-data correction only.",
-     "inputs": ["market_data issues", "last-known-good market state"], "outputs": ["corrected market fields"]},
-    {"id": "retry_competition", "label": "Retry Competition", "phase": "retry", "kind": "search+llm", "x": 980, "y": 740,
-     "description": "Targeted competition evidence correction only.",
-     "inputs": ["competition issues"], "outputs": ["corrected competition evidence"]},
-    {"id": "retry_risk", "label": "Retry Risk", "phase": "retry", "kind": "search+llm", "x": 1180, "y": 870,
-     "description": "Targeted risk evidence correction only.",
-     "inputs": ["risk issues"], "outputs": ["corrected risk evidence"]},
-    {"id": "success_final", "label": "Success Final", "phase": "final", "kind": "llm", "x": 330, "y": 1450,
-     "description": "Write the final research conclusion after the pipeline passes.",
-     "inputs": ["verified state"], "outputs": ["status", "final_answer"]},
-    {"id": "insufficient_final", "label": "Insufficient Evidence", "phase": "final", "kind": "llm", "x": 750, "y": 1450,
-     "description": "Write the unresolved-problems report after a hard stop.",
-     "inputs": ["unresolved blocker/major issues"], "outputs": ["status", "final_answer"]},
+
+    {"id": "retry_fundamentals", "label": "Retry Financial", "phase": "retry", "kind": "sec+python", "x": 1360, "y": 420,
+     "description": "Targeted financial-data correction only.", "inputs": ["financial_data issues", "last-known-good financial state"], "outputs": ["corrected financial fields"]},
+    {"id": "retry_market_data", "label": "Retry Market", "phase": "retry", "kind": "search+llm", "x": 1580, "y": 550,
+     "description": "Targeted market-data correction only.", "inputs": ["market_data issues", "last-known-good market state"], "outputs": ["corrected market fields"]},
+    {"id": "retry_competition", "label": "Retry Competition", "phase": "retry", "kind": "search+llm", "x": 1360, "y": 680,
+     "description": "Targeted competition evidence correction only.", "inputs": ["competition issues"], "outputs": ["corrected competition evidence"]},
+    {"id": "retry_risk", "label": "Retry Risk", "phase": "retry", "kind": "search+llm", "x": 1580, "y": 810,
+     "description": "Targeted risk evidence correction only.", "inputs": ["risk issues"], "outputs": ["corrected risk evidence"]},
+
+    {"id": "success_final", "label": "Success Final", "phase": "final", "kind": "llm", "x": 250, "y": 2000,
+     "description": "Write the final research conclusion after the pipeline passes.", "inputs": ["verified state"], "outputs": ["status", "final_answer"]},
+    {"id": "insufficient_final", "label": "Insufficient Evidence", "phase": "final", "kind": "llm", "x": 700, "y": 2000,
+     "description": "Write the unresolved-problems report after a hard stop.", "inputs": ["unresolved blocker/major issues"], "outputs": ["status", "final_answer"]},
+]
+
+STRATEGY_IDS = [
+    "strategy_graham", "strategy_buffett", "strategy_lynch", "strategy_fisher", "strategy_greenblatt",
+    "strategy_hohn", "strategy_druckenmiller", "strategy_tepper", "strategy_klarman", "strategy_ackman_smith",
 ]
 
 GRAPH_EDGES = [
     {"id": "resolver-planner", "source": "resolver", "target": "planner", "channels": ["logic", "information"], "label": "canonical security"},
     {"id": "planner-dispatch", "source": "planner", "target": "research_dispatch", "channels": ["logic", "information"], "label": "research plan"},
-    {"id": "dispatch-fundamentals", "source": "research_dispatch", "target": "fundamentals", "channels": ["logic"], "label": "fan-out"},
-    {"id": "dispatch-market", "source": "research_dispatch", "target": "market_data", "channels": ["logic"], "label": "fan-out"},
-    {"id": "dispatch-competition", "source": "research_dispatch", "target": "competition", "channels": ["logic"], "label": "fan-out"},
-    {"id": "dispatch-risk", "source": "research_dispatch", "target": "risk", "channels": ["logic"], "label": "fan-out"},
+    *[
+        {"id": f"dispatch-{node}", "source": "research_dispatch", "target": node, "channels": ["logic"], "label": "fan-out"}
+        for node in ("fundamentals", "market_data", "competition", "risk")
+    ],
     {"id": "fundamentals-merge", "source": "fundamentals", "target": "merge", "channels": ["information", "logic"], "label": "financial snapshot"},
     {"id": "market-merge", "source": "market_data", "target": "merge", "channels": ["information", "logic"], "label": "market snapshot"},
     {"id": "competition-merge", "source": "competition", "target": "merge", "channels": ["information", "logic"], "label": "competition evidence"},
     {"id": "risk-merge", "source": "risk", "target": "merge", "channels": ["information", "logic"], "label": "risk evidence"},
-    {"id": "merge-assumption", "source": "merge", "target": "assumption_builder", "channels": ["information", "logic"], "label": "evidence package"},
+    {"id": "merge-strategy-metrics", "source": "merge", "target": "strategy_metrics", "channels": ["information", "logic"], "label": "canonical research state"},
+    *[
+        {"id": f"metrics-{node}", "source": "strategy_metrics", "target": node, "channels": ["information", "logic"], "label": "shared metrics"}
+        for node in STRATEGY_IDS
+    ],
+    *[
+        {"id": f"{node}-screen-hub", "source": node, "target": "strategy_screening_hub", "channels": ["information", "logic"], "label": "rule verdicts"}
+        for node in STRATEGY_IDS
+    ],
+    {"id": "screen-hub-assumption", "source": "strategy_screening_hub", "target": "assumption_builder", "channels": ["information", "logic"], "label": "strategy matrix"},
     {"id": "assumption-valuation", "source": "assumption_builder", "target": "valuation", "channels": ["information", "logic"], "label": "scenario assumptions"},
     {"id": "valuation-verification", "source": "valuation", "target": "verification", "channels": ["information", "logic"], "label": "valuation outputs"},
     {"id": "verification-critic", "source": "verification", "target": "critic", "channels": ["information", "logic"], "label": "deterministic verdict"},
@@ -99,7 +138,7 @@ GRAPH_EDGES = [
     {"id": "retry-risk-merge", "source": "retry_risk", "target": "merge", "channels": ["information", "logic"], "label": "corrected evidence"},
 ]
 
-CANVAS = {"width": 1450, "height": 1580, "node_width": 190, "node_height": 74}
+CANVAS = {"width": 1850, "height": 2140, "node_width": 205, "node_height": 74}
 _NODE_BY_ID = {item["id"]: item for item in NODE_META}
 
 
@@ -109,7 +148,7 @@ def graph_metadata() -> dict[str, Any]:
         "nodes": NODE_META,
         "edges": GRAPH_EDGES,
         "legend": {
-            "information": "字段、证据、财务快照在节点之间传递",
+            "information": "字段、证据、财务快照和策略指标在节点之间传递",
             "logic": "LangGraph 实际执行顺序 / fan-out / fan-in",
             "decision": "Critic → Router 的条件判断与定向重试",
         },
@@ -146,7 +185,10 @@ def compact_state_patch(update: dict[str, Any]) -> dict[str, Any]:
     hidden = {
         "fundamentals_report", "competition_report", "risk_report", "market_report",
         "fundamentals_sources", "market_sources", "competition_sources", "risk_sources",
-        "merged_sources",
+        "merged_sources", "strategy_metrics",
+        "strategy_graham", "strategy_buffett", "strategy_lynch", "strategy_fisher",
+        "strategy_greenblatt", "strategy_hohn", "strategy_druckenmiller", "strategy_tepper",
+        "strategy_klarman", "strategy_ackman_smith",
     }
     return {key: value for key, value in update.items() if key not in hidden}
 
@@ -177,6 +219,16 @@ def summarize_node(node: str, state: dict[str, Any], update: dict[str, Any]) -> 
         return {"source_count": len(state.get("risk_sources", [])), "report_preview": _preview(state.get("risk_report", ""))}
     if node == "merge":
         return {"evidence_completeness": state.get("evidence_completeness"), "unique_sources": len(state.get("merged_sources", [])), "financial_basis": state.get("financial_basis"), "market_cap_usd_b": state.get("market_cap")}
+    if node == "strategy_metrics":
+        metrics = state.get("strategy_metrics", {})
+        keep = ["current_ratio", "debt_to_equity", "net_margin", "roe_5y_avg", "revenue_cagr_5y", "eps_cagr_5y", "p_fcf", "fcf_yield", "pe", "pb", "peg", "graham_number"]
+        return {key: metrics.get(key) for key in keep}
+    if node in STRATEGY_IDS:
+        result = state.get(node, {})
+        return {"title": result.get("title"), "verdict": result.get("verdict"), "coverage": result.get("coverage"), "counts": result.get("counts"), "rules": _preview(result.get("rules", []))}
+    if node == "strategy_screening_hub":
+        screen = state.get("strategy_screening", {})
+        return {"verdict_counts": screen.get("verdict_counts", {}), "best_matches": screen.get("best_matches", [])}
     if node == "assumption_builder":
         assumptions = state.get("valuation_assumptions", {})
         return {scenario: {"fcf_growth_rate": assumptions.get(scenario, {}).get("fcf_growth_rate"), "discount_rate": assumptions.get(scenario, {}).get("discount_rate"), "exit_multiple": assumptions.get(scenario, {}).get("exit_multiple")} for scenario in ("bear", "base", "bull")}
@@ -199,10 +251,14 @@ def summarize_node(node: str, state: dict[str, Any], update: dict[str, Any]) -> 
 
 
 def decision_snapshot(state: dict[str, Any], route: str) -> dict[str, Any]:
-    actionable = [issue for issue in state.get("research_issues", []) if issue.get("severity") in {"blocker", "major"}]
+    actionable = actionable_issues(state)
     return {
-        "route": route, "needs_revision": bool(actionable), "revision_count": state.get("revision_count", 0),
-        "issue_attempts": state.get("issue_attempts", {}), "stagnant_revision_count": state.get("stagnant_revision_count", 0),
+        "route": route,
+        "needs_revision": bool(actionable),
+        "revision_count": state.get("revision_count", 0),
+        "issue_attempts": state.get("issue_attempts", {}),
+        "stagnant_revision_count": state.get("stagnant_revision_count", 0),
         "actionable_issues": actionable,
+        "all_critic_issues": state.get("research_issues", []),
         "candidates": ["success_final", "retry_fundamentals", "retry_market_data", "assumption_builder", "retry_competition", "retry_risk", "insufficient_final"],
     }
