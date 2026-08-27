@@ -20,6 +20,19 @@ class SecurityCandidate(StrictModel):
 
 class ResolvedSecurity(StrictModel):
     status: Literal["resolved", "ambiguous", "not_found"]
+    input_kind: Literal[
+        "ticker",
+        "ticker_typo",
+        "company_name",
+        "brand",
+        "alias",
+        "unknown",
+    ] = "unknown"
+    listing_status: Literal[
+        "listed",
+        "not_listed",
+        "unknown",
+    ] = "unknown"
     company_name: str = ""
     ticker: str = ""
     exchange: str = ""
