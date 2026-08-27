@@ -29,10 +29,20 @@ BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 INITIAL_RESEARCH_NODES = {
-    "fundamentals",
-    "market_data",
-    "competition",
-    "risk",
+    "fundamentals", "market_data", "competition", "risk",
+}
+
+STRATEGY_NODES = {
+    "strategy_graham",
+    "strategy_buffett",
+    "strategy_lynch",
+    "strategy_fisher",
+    "strategy_greenblatt",
+    "strategy_hohn",
+    "strategy_druckenmiller",
+    "strategy_tepper",
+    "strategy_klarman",
+    "strategy_ackman_smith",
 }
 
 RETRY_TO_OWNER = {
@@ -43,15 +53,8 @@ RETRY_TO_OWNER = {
 }
 
 
-app = FastAPI(
-    title="Universal Equity Research Agent"
-)
-
-app.mount(
-    "/static",
-    StaticFiles(directory=str(FRONTEND_DIR)),
-    name="static",
-)
+app = FastAPI(title="Universal Equity Research Agent")
+app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 @app.get("/")
@@ -65,45 +68,29 @@ def api_graph_meta():
 
 
 def sse(payload: dict) -> str:
-    return (
-        "data: "
-        + json.dumps(
-            payload,
-            ensure_ascii=False,
-            default=str,
-        )
-        + "\n\n"
-    )
+    return "data: " + json.dumps(payload, ensure_ascii=False, default=str) + "\n\n"
 
 
 @app.get("/api/resolve")
-async def api_resolve(
-    query: str = Query(..., min_length=1)
-):
-    resolved = await asyncio.to_thread(
-        resolve_security,
-        query,
-    )
+async def api_resolve(query: str = Query(..., min_length=1)):
+    resolved = await asyncio.to_thread(resolve_security, query)
     return resolved.model_dump()
 
 
 @app.get("/api/research/stream")
-async def research_stream(
-    query: str = Query(..., min_length=1)
-):
+async def research_stream(query: str = Query(..., min_length=1)):
     async def event_generator():
         connection = None
         run_started = time.monotonic()
         node_started_at = {}
         node_attempts = defaultdict(int)
         initial_completed = set()
+        strategy_completed = set()
 
         def event(event_type: str, **payload):
             return {
                 "type": event_type,
-                "elapsed_ms": round(
-                    (time.monotonic() - run_started) * 1000
-                ),
+                "elapsed_ms": round((time.monotonic() - run_started) * 1000),
                 **payload,
             }
 
@@ -130,47 +117,32 @@ async def research_stream(
         try:
             yield sse(mark_started("resolver"))
             resolver_input = {"user_query": query}
-
-            resolved = await asyncio.to_thread(
-                resolve_security,
-                query,
-            )
-
-            resolver_duration = round(
-                (time.monotonic() - node_started_at["resolver"]) * 1000
-            )
+            resolved = await asyncio.to_thread(resolve_security, query)
+            resolver_duration = round((time.monotonic() - node_started_at["resolver"]) * 1000)
 
             yield sse(event("identity", data=resolved.model_dump()))
-            yield sse(
-                event(
-                    "node_complete",
-                    node="resolver",
-                    attempt=node_attempts["resolver"],
-                    duration_ms=resolver_duration,
-                    summary={
-                        "status": resolved.status,
-                        "company": resolved.company_name,
-                        "ticker": resolved.ticker,
-                        "exchange": resolved.exchange,
-                        "confidence": resolved.confidence,
-                    },
-                    input_snapshot=resolver_input,
-                    output_snapshot={
-                        "company": resolved.company_name,
-                        "ticker": resolved.ticker,
-                        "exchange": resolved.exchange,
-                        "currency": resolved.currency,
-                        "country": resolved.country,
-                    },
-                    output_keys=[
-                        "company",
-                        "ticker",
-                        "exchange",
-                        "currency",
-                        "country",
-                    ],
-                )
-            )
+            yield sse(event(
+                "node_complete",
+                node="resolver",
+                attempt=node_attempts["resolver"],
+                duration_ms=resolver_duration,
+                summary={
+                    "status": resolved.status,
+                    "company": resolved.company_name,
+                    "ticker": resolved.ticker,
+                    "exchange": resolved.exchange,
+                    "confidence": resolved.confidence,
+                },
+                input_snapshot=resolver_input,
+                output_snapshot={
+                    "company": resolved.company_name,
+                    "ticker": resolved.ticker,
+                    "exchange": resolved.exchange,
+                    "currency": resolved.currency,
+                    "country": resolved.country,
+                },
+                output_keys=["company", "ticker", "exchange", "currency", "country"],
+            ))
 
             if resolved.status != "resolved":
                 message = (
@@ -178,32 +150,17 @@ async def research_stream(
                     if resolved.status == "ambiguous"
                     else "Security could not be resolved."
                 )
-                yield sse(
-                    event(
-                        "error",
-                        node="resolver",
-                        message=message,
-                        resolution=resolved.model_dump(),
-                    )
-                )
+                yield sse(event("error", node="resolver", message=message, resolution=resolved.model_dump()))
                 return
 
-            yield sse(
-                event(
-                    "edge_transfer",
-                    source="resolver",
-                    target="planner",
-                    channel="information",
-                    payload_keys=[
-                        "company",
-                        "ticker",
-                        "exchange",
-                        "currency",
-                        "country",
-                    ],
-                    label="canonical security",
-                )
-            )
+            yield sse(event(
+                "edge_transfer",
+                source="resolver",
+                target="planner",
+                channel="information",
+                payload_keys=["company", "ticker", "exchange", "currency", "country"],
+                label="canonical security",
+            ))
             yield sse(mark_started("planner"))
 
             connection = sqlite3.connect(
@@ -213,16 +170,12 @@ async def research_stream(
             checkpointer = SqliteSaver(connection)
             graph = build_graph(checkpointer=checkpointer)
 
-            thread_id = (
-                f"{resolved.ticker.lower()}-ui-"
-                f"{uuid.uuid4().hex[:10]}"
-            )
-
+            thread_id = f"{resolved.ticker.lower()}-ui-{uuid.uuid4().hex[:10]}"
             config = {
-                "recursion_limit": 60,
+                "recursion_limit": 90,
                 "configurable": {
                     "thread_id": thread_id,
-                    "max_concurrency": 2,
+                    "max_concurrency": 4,
                 },
             }
 
@@ -239,30 +192,14 @@ async def research_stream(
 
             def run_graph():
                 try:
-                    for chunk in graph.stream(
-                        state,
-                        config=config,
-                        stream_mode="updates",
-                    ):
-                        asyncio.run_coroutine_threadsafe(
-                            queue.put(("chunk", chunk)),
-                            loop,
-                        ).result()
+                    for chunk in graph.stream(state, config=config, stream_mode="updates"):
+                        asyncio.run_coroutine_threadsafe(queue.put(("chunk", chunk)), loop).result()
                 except Exception as exc:
-                    asyncio.run_coroutine_threadsafe(
-                        queue.put(("error", str(exc))),
-                        loop,
-                    ).result()
+                    asyncio.run_coroutine_threadsafe(queue.put(("error", str(exc))), loop).result()
                 finally:
-                    asyncio.run_coroutine_threadsafe(
-                        queue.put(("done", None)),
-                        loop,
-                    ).result()
+                    asyncio.run_coroutine_threadsafe(queue.put(("done", None)), loop).result()
 
-            task = asyncio.create_task(
-                asyncio.to_thread(run_graph)
-            )
-
+            task = asyncio.create_task(asyncio.to_thread(run_graph))
             last_state = dict(state)
 
             while True:
@@ -270,7 +207,6 @@ async def research_stream(
 
                 if kind == "done":
                     break
-
                 if kind == "error":
                     yield sse(event("error", message=payload))
                     break
@@ -282,247 +218,160 @@ async def research_stream(
                         update = {}
 
                     meta = node_meta(node_name)
-
                     if node_name not in node_started_at:
                         yield sse(mark_started(node_name))
 
-                    input_snapshot = snapshot_keys(
-                        last_state,
-                        meta.get("inputs", []),
-                    )
-
+                    input_snapshot = snapshot_keys(last_state, meta.get("inputs", []))
                     last_state.update(update)
 
                     duration_ms = round(
-                        (
-                            time.monotonic()
-                            - node_started_at.get(node_name, time.monotonic())
-                        )
-                        * 1000
+                        (time.monotonic() - node_started_at.get(node_name, time.monotonic())) * 1000
                     )
+                    output_snapshot = snapshot_keys(update, meta.get("outputs", []))
+                    summary = summarize_node(node_name, last_state, update)
 
-                    output_snapshot = snapshot_keys(
-                        update,
-                        meta.get("outputs", []),
-                    )
-
-                    summary = summarize_node(
-                        node_name,
-                        last_state,
-                        update,
-                    )
-
-                    yield sse(
-                        event(
-                            "node_complete",
-                            node=node_name,
-                            attempt=max(1, node_attempts[node_name]),
-                            duration_ms=duration_ms,
-                            summary=summary,
-                            input_snapshot=input_snapshot,
-                            output_snapshot=output_snapshot,
-                            output_keys=sorted(update.keys()),
-                            state_patch=compact_state_patch(update),
-                        )
-                    )
+                    yield sse(event(
+                        "node_complete",
+                        node=node_name,
+                        attempt=max(1, node_attempts[node_name]),
+                        duration_ms=duration_ms,
+                        summary=summary,
+                        input_snapshot=input_snapshot,
+                        output_snapshot=output_snapshot,
+                        output_keys=sorted(update.keys()),
+                        state_patch=compact_state_patch(update),
+                    ))
 
                     if node_name == "planner":
-                        yield sse(
-                            event(
-                                "edge_transfer",
-                                source="planner",
-                                target="research_dispatch",
-                                channel="information",
-                                payload_keys=["plan"],
-                                label="research plan",
-                            )
-                        )
+                        yield sse(event(
+                            "edge_transfer", source="planner", target="research_dispatch",
+                            channel="information", payload_keys=["plan"], label="research plan",
+                        ))
                         yield sse(mark_started("research_dispatch"))
 
                     elif node_name == "research_dispatch":
-                        for branch in (
-                            "fundamentals",
-                            "market_data",
-                            "competition",
-                            "risk",
-                        ):
-                            yield sse(
-                                event(
-                                    "edge_transfer",
-                                    source="research_dispatch",
-                                    target=branch,
-                                    channel="logic",
-                                    payload_keys=["plan", "attempt_count"],
-                                    label="parallel fan-out",
-                                )
-                            )
+                        for branch in ("fundamentals", "market_data", "competition", "risk"):
+                            yield sse(event(
+                                "edge_transfer", source="research_dispatch", target=branch,
+                                channel="logic", payload_keys=["plan", "attempt_count"], label="parallel fan-out",
+                            ))
                             yield sse(mark_queued(branch))
 
                     elif node_name in INITIAL_RESEARCH_NODES:
                         initial_completed.add(node_name)
-                        yield sse(
-                            event(
-                                "edge_transfer",
-                                source=node_name,
-                                target="merge",
-                                channel="information",
-                                payload_keys=sorted(update.keys()),
-                                label="evidence payload",
-                            )
-                        )
+                        yield sse(event(
+                            "edge_transfer", source=node_name, target="merge",
+                            channel="information", payload_keys=sorted(update.keys()), label="evidence payload",
+                        ))
                         if initial_completed == INITIAL_RESEARCH_NODES:
                             yield sse(mark_started("merge"))
 
                     elif node_name in RETRY_TO_OWNER:
-                        yield sse(
-                            event(
-                                "edge_transfer",
-                                source=node_name,
-                                target="merge",
-                                channel="information",
-                                payload_keys=sorted(update.keys()),
-                                label="targeted correction",
-                            )
-                        )
+                        yield sse(event(
+                            "edge_transfer", source=node_name, target="merge",
+                            channel="information", payload_keys=sorted(update.keys()), label="targeted correction",
+                        ))
                         yield sse(mark_started("merge"))
 
                     elif node_name == "merge":
-                        yield sse(
-                            event(
-                                "edge_transfer",
-                                source="merge",
-                                target="assumption_builder",
-                                channel="information",
-                                payload_keys=[
-                                    "evidence_summary",
-                                    "evidence_completeness",
-                                    "market_cap",
-                                    "market_snapshot",
-                                ],
-                                label="merged evidence",
-                            )
-                        )
+                        strategy_completed.clear()
+                        yield sse(event(
+                            "edge_transfer", source="merge", target="strategy_metrics",
+                            channel="information",
+                            payload_keys=["financial_snapshot", "market_snapshot", "market_cap", "market_price", "shares_outstanding"],
+                            label="canonical research state",
+                        ))
+                        yield sse(mark_started("strategy_metrics"))
+
+                    elif node_name == "strategy_metrics":
+                        for strategy_node in sorted(STRATEGY_NODES):
+                            yield sse(event(
+                                "edge_transfer", source="strategy_metrics", target=strategy_node,
+                                channel="information", payload_keys=["strategy_metrics"], label="shared screening metrics",
+                            ))
+                            yield sse(mark_queued(strategy_node))
+
+                    elif node_name in STRATEGY_NODES:
+                        strategy_completed.add(node_name)
+                        yield sse(event(
+                            "edge_transfer", source=node_name, target="strategy_screening_hub",
+                            channel="information", payload_keys=sorted(update.keys()), label="rule verdicts",
+                        ))
+                        if strategy_completed == STRATEGY_NODES:
+                            yield sse(mark_started("strategy_screening_hub"))
+
+                    elif node_name == "strategy_screening_hub":
+                        yield sse(event(
+                            "edge_transfer", source="strategy_screening_hub", target="assumption_builder",
+                            channel="information", payload_keys=["strategy_screening"], label="strategy matrix",
+                        ))
                         yield sse(mark_started("assumption_builder"))
 
                     elif node_name == "assumption_builder":
-                        yield sse(
-                            event(
-                                "edge_transfer",
-                                source="assumption_builder",
-                                target="valuation",
-                                channel="information",
-                                payload_keys=["valuation_assumptions"],
-                                label="scenario assumptions",
-                            )
-                        )
+                        yield sse(event(
+                            "edge_transfer", source="assumption_builder", target="valuation",
+                            channel="information", payload_keys=["valuation_assumptions"], label="scenario assumptions",
+                        ))
                         yield sse(mark_started("valuation"))
 
                     elif node_name == "valuation":
-                        yield sse(
-                            event(
-                                "edge_transfer",
-                                source="valuation",
-                                target="verification",
-                                channel="information",
-                                payload_keys=["valuation_result"],
-                                label="valuation outputs",
-                            )
-                        )
+                        yield sse(event(
+                            "edge_transfer", source="valuation", target="verification",
+                            channel="information", payload_keys=["valuation_result"], label="valuation outputs",
+                        ))
                         yield sse(mark_started("verification"))
 
                     elif node_name == "verification":
-                        yield sse(
-                            event(
-                                "edge_transfer",
-                                source="verification",
-                                target="critic",
-                                channel="information",
-                                payload_keys=["deterministic_verification"],
-                                label="deterministic verdict",
-                            )
-                        )
+                        yield sse(event(
+                            "edge_transfer", source="verification", target="critic",
+                            channel="information", payload_keys=["deterministic_verification"], label="deterministic verdict",
+                        ))
                         yield sse(mark_started("critic"))
 
                     elif node_name == "critic":
-                        yield sse(
-                            event(
-                                "edge_transfer",
-                                source="critic",
-                                target="typed_router",
-                                channel="decision",
-                                payload_keys=[
-                                    "research_issues",
-                                    "revision_count",
-                                    "issue_attempts",
-                                    "stagnant_revision_count",
-                                ],
-                                label="typed issues",
-                            )
-                        )
+                        yield sse(event(
+                            "edge_transfer", source="critic", target="typed_router",
+                            channel="decision",
+                            payload_keys=["research_issues", "revision_count", "issue_attempts", "stagnant_revision_count"],
+                            label="typed issues",
+                        ))
                         yield sse(mark_started("typed_router"))
 
                         route = route_after_critic(last_state)
                         decision = decision_snapshot(last_state, route)
 
-                        yield sse(
-                            event(
-                                "decision_evaluated",
-                                node="typed_router",
-                                decision=decision,
-                            )
-                        )
-                        yield sse(
-                            event(
-                                "route_selected",
-                                source="typed_router",
-                                target=route,
-                                channel="decision",
-                                label=route,
-                                decision=decision,
-                            )
-                        )
-                        yield sse(
-                            event(
-                                "node_complete",
-                                node="typed_router",
-                                attempt=max(1, node_attempts["typed_router"]),
-                                duration_ms=round(
-                                    (
-                                        time.monotonic()
-                                        - node_started_at["typed_router"]
-                                    )
-                                    * 1000
-                                ),
-                                summary=decision,
-                                input_snapshot=snapshot_keys(
-                                    last_state,
-                                    node_meta("typed_router").get("inputs", []),
-                                ),
-                                output_snapshot={"route": route},
-                                output_keys=["route"],
-                                state_patch={},
-                            )
-                        )
+                        yield sse(event("decision_evaluated", node="typed_router", decision=decision))
+                        yield sse(event(
+                            "route_selected", source="typed_router", target=route,
+                            channel="decision", label=route, decision=decision,
+                        ))
+                        yield sse(event(
+                            "node_complete",
+                            node="typed_router",
+                            attempt=max(1, node_attempts["typed_router"]),
+                            duration_ms=round((time.monotonic() - node_started_at["typed_router"]) * 1000),
+                            summary=decision,
+                            input_snapshot=snapshot_keys(last_state, node_meta("typed_router").get("inputs", [])),
+                            output_snapshot={"route": route},
+                            output_keys=["route"],
+                            state_patch={},
+                        ))
 
                         if route not in node_started_at or route == "assumption_builder":
                             yield sse(mark_started(route))
 
             await task
-
             snapshot = graph.get_state(config)
             final_state = snapshot.values if snapshot else last_state
 
-            yield sse(
-                event(
-                    "final",
-                    state=compact_state_patch(dict(final_state)),
-                    thread_id=thread_id,
-                )
-            )
+            yield sse(event(
+                "final",
+                state=compact_state_patch(dict(final_state)),
+                thread_id=thread_id,
+            ))
 
         except Exception as exc:
             yield sse(event("error", message=str(exc)))
-
         finally:
             if connection is not None:
                 connection.close()
@@ -530,8 +379,5 @@ async def research_stream(
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
