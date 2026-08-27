@@ -21,7 +21,9 @@ jobs:
       - name: Python syntax check
         run: python -m py_compile main.py ui_server.py agent/*.py router_smoke_test.py valuation_smoke_test.py test_sec_selector.py graph_structure_smoke_test.py ui_protocol_smoke_test.py
       - name: Frontend JavaScript syntax
-        run: node --check frontend/vnext.js
+        run: |
+          node --check frontend/vnext.js
+          node --check frontend/runtime_patch.js
       - name: Router circuit breaker
         run: python router_smoke_test.py
       - name: Valuation verification
