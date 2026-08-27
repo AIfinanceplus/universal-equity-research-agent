@@ -1,0 +1,27 @@
+name: smoke-tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt
+      - name: Syntax check
+        run: python -m py_compile main.py ui_server.py agent/*.py router_smoke_test.py valuation_smoke_test.py test_sec_selector.py graph_structure_smoke_test.py
+      - name: Router circuit breaker
+        run: python router_smoke_test.py
+      - name: Valuation verification
+        run: python valuation_smoke_test.py
+      - name: SEC period-first selector
+        run: python test_sec_selector.py
+      - name: Graph fan-in structure
+        run: python graph_structure_smoke_test.py

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Universal Equity Research Agent</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">Canonical · Universal Equity Research Agent</div>
+        <h1>公司研究控制台</h1>
+        <p>输入 Ticker、公司名称、中文名或模糊名称。系统完成证券解析、SEC TTM、市场数据、竞争/风险、估值、验证和有界定向修正。</p>
+      </div>
+      <div id="statusBadge" class="badge idle">Idle</div>
+    </header>
+
+    <section class="panel search-panel">
+      <form id="researchForm">
+        <label for="companyQuery">公司 / Ticker</label>
+        <div class="search-row">
+          <input id="companyQuery" name="query" placeholder="TSLA / Tesla / 特斯拉" autocomplete="off" />
+          <button id="runButton" type="submit">开始研究</button>
+        </div>
+      </form>
+      <div id="identityCard" class="identity-card hidden"></div>
+    </section>
+
+    <section class="grid two">
+      <div class="panel">
+        <div class="section-head">
+          <h2>Graph 逻辑</h2>
+          <span class="muted">正在运行的节点会高亮</span>
+        </div>
+        <div id="graph" class="graph"></div>
+      </div>
+
+      <div class="panel">
+        <div class="section-head">
+          <h2>过程</h2>
+          <span id="elapsed" class="muted">0.0s</span>
+        </div>
+        <div id="timeline" class="timeline"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>结果</h2>
+        <span class="muted">数据 → 假设 → 估值 → 验证</span>
+      </div>
+      <div id="metrics" class="metric-grid"></div>
+      <div class="result-grid">
+        <div>
+          <h3>估值情景</h3>
+          <div id="valuationBars" class="bars"></div>
+        </div>
+        <div>
+          <h3>Verification</h3>
+          <div id="verificationCard" class="verification empty">尚未运行</div>
+        </div>
+      </div>
+      <div class="final-answer-wrap">
+        <h3>最终研究结论</h3>
+        <pre id="finalAnswer" class="final-answer">等待研究完成…</pre>
+      </div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

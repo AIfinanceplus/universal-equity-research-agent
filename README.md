@@ -1,22 +1,18 @@
 # Universal Equity Research Agent
 
-A LangGraph-based equity research agent with deterministic financial data, valuation math, verification, targeted retries, and a local web UI.
+Canonical GitHub version of a LangGraph-based equity research agent with direct SEC financial data, verifiable market provenance, deterministic valuation math, independent verification, bounded targeted retries, and a local web UI.
 
-## Current baseline
-
-This repository is the canonical baseline after the V8.5.1 data/valuation compatibility fixes plus deterministic loop protection.
-
-### Core architecture
+## Architecture
 
 ```text
 User Input
    ↓
-Company / Security Resolver
+Security Resolver
    ↓
 Planner
    ↓
 Financial Data ─┐
-Market Data ────┼─→ Evidence Hub
+Market Data ────┼─→ Evidence Hub (single join)
 Competition ────┤
 Risk ───────────┘
    ↓
@@ -29,13 +25,36 @@ Deterministic Verification
 LLM Critic
    ↓
 Typed Issue Router
-   ↓
-Success / Targeted Retry / Insufficient Evidence
+   ├─ targeted retry (bounded)
+   ├─ success
+   └─ insufficient evidence
 ```
 
-## Data layer
+## Evidence Hub / loop fix
 
-For SEC filers, canonical financial data is sourced directly from official SEC EDGAR APIs rather than LLM extraction.
+The initial four research branches now use one true fan-in barrier, so Evidence Hub runs once after all four complete. Targeted retries use separate retry aliases and can re-enter Evidence Hub without retriggering the original four-way join.
+
+The UI also emits a `node_start` event immediately when moving from Evidence Hub to Assumption Builder, so a slow LLM call is shown as **Assumption Builder running** instead of making Evidence Hub look frozen.
+
+Deterministic circuit breakers prevent infinite critique loops:
+
+```text
+financial_data       max 2 retries
+market_data          max 2 retries
+valuation_assumption max 1 retry
+competition          max 1 retry
+risk                 max 1 retry
+math                 0 retries
+```
+
+Additional stops:
+- global revision limit (`MAX_RESEARCH_ATTEMPTS`, default 3)
+- repeated/stagnant actionable issue set exits after two repeats
+- math failures go directly to insufficient evidence
+
+## SEC data layer
+
+For SEC filers, canonical financial data bypasses LLM extraction:
 
 ```text
 Ticker
@@ -46,68 +65,45 @@ CIK
   ↓
 SEC Submissions + Company Facts
   ↓
-Period-first XBRL selection
+latest 10-K / 10-Q periods become hard targets
   ↓
-Latest Annual + Current YTD - Prior Comparable YTD
+period-first XBRL concept selection
+  ↓
+Annual + Current YTD - Prior Comparable YTD
   ↓
 TTM
   ↓
 FCF = OCF - CapEx
 ```
 
-The selector uses the latest 10-K/10-Q report periods as hard targets before choosing among XBRL concepts, preventing stale historical tags from outranking current facts.
+This prevents obsolete XBRL tags (for example an old `Revenues` series) from outranking current filings.
+
+For multi-class issuers, share count can fall back to parsing the latest SEC filing cover and summing common-stock classes.
 
 ## Market data
 
-Market data requires a verifiable public source URL. If provider-reported market cap is unavailable but a valid price and SEC share count are available, the system can derive:
+Market data must have a public verifiable URL. Provider-reported Market Cap is preferred. If it is unavailable but price and SEC shares are verified:
 
 ```text
 Market Cap = Price × SEC Shares Outstanding
 ```
 
-For multi-class issuers, the SEC filing-cover fallback can sum common-stock classes when Company Facts does not expose one consolidated share count.
-
 ## Valuation
 
-The valuation engine is deterministic Python. Each Bear/Base/Bull scenario exposes:
-
+The deterministic 5-year FCF scenario engine exposes and independently verifies:
 - starting FCF
-- years 1-5 projected FCF
-- discount factor for each year
+- years 1–5 projected FCF
+- discount factors
 - PV of each annual FCF
 - explicit-period PV
-- terminal FCF
-- terminal multiple
-- terminal value
-- PV of terminal value
+- terminal FCF and multiple
+- terminal value and PV
 - estimated equity value
 - implied return
 
-The verifier independently recomputes the scenario math.
+This is intentionally a simplified scenario valuation, not a standard WACC DCF.
 
-## Loop protection
-
-The Typed Issue Router is bounded by deterministic circuit breakers:
-
-- global revision limit
-- per-issue retry budgets
-- repeated/stagnant issue-set detection
-- math failures never loop back to research
-
-Default retry budgets:
-
-```text
-financial_data       2
-market_data          2
-valuation_assumption 1
-competition          1
-risk                 1
-math                 0
-```
-
-This prevents an LLM critic from keeping the graph alive indefinitely by rephrasing the same unresolved issue.
-
-## Setup on macOS
+## macOS setup
 
 ```bash
 python3 -m venv .venv
@@ -125,40 +121,29 @@ SEC_USER_AGENT=YourName your.email@example.com
 
 Never commit `.env`.
 
-Run syntax checks:
+## Offline regression tests
 
 ```bash
 python -m py_compile main.py ui_server.py agent/*.py
+python router_smoke_test.py
+python valuation_smoke_test.py
+python test_sec_selector.py
+python graph_structure_smoke_test.py
 ```
 
-Run regression smoke tests:
+GitHub Actions runs these automatically on every push / pull request.
+
+## Live data checks
 
 ```bash
-python test_sec_selector.py
-python sec_node_compat_smoke_test.py
-python valuation_smoke_test.py
 python sec_smoke_test.py META
-python market_smoke_test.py META
+python sec_smoke_test.py GOOGL
 ```
 
-Start the UI:
+## Start UI
 
 ```bash
 python -m uvicorn ui_server:app --reload --port 8765
 ```
 
-Open:
-
-```text
-http://127.0.0.1:8765
-```
-
-## Design rules
-
-- One canonical owner per important field.
-- Missing retry output must not overwrite last-known-good verified data.
-- SEC data and valuation math are deterministic Python responsibilities.
-- LLMs handle planning, open-ended research, assumptions, critique, and narrative.
-- Company identity and security identity are distinct.
-- Latest public TTM plus a current market quote is normal equity-research alignment; exact same-day financial statements are not required.
-- Critic output cannot override deterministic verification without an actual deterministic failure.
+Open `http://127.0.0.1:8765` and test `TSLA`, `META`, or `GOOGL`.

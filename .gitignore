@@ -1,0 +1,9 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+checkpoints.sqlite
+checkpoints.sqlite-shm
+checkpoints.sqlite-wal

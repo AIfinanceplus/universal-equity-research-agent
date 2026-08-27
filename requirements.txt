@@ -1,0 +1,11 @@
+langgraph
+langchain
+langchain-openai
+langgraph-checkpoint-sqlite
+python-dotenv
+pydantic
+typing-extensions
+fastapi
+uvicorn[standard]
+requests
+beautifulsoup4

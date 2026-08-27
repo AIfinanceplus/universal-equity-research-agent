@@ -1,0 +1,101 @@
+def make_initial_state(
+    *,
+    company: str,
+    ticker: str,
+    exchange: str = "",
+    currency: str = "USD",
+    country: str = "",
+):
+    return {
+        "company": company,
+        "ticker": ticker,
+        "exchange": exchange,
+        "currency": currency,
+        "country": country,
+
+        "plan": [],
+        "attempt_count": 0,
+        "revision_count": 0,
+
+        "issue_attempts": {
+            "financial_data": 0,
+            "market_data": 0,
+            "valuation_assumption": 0,
+            "competition": 0,
+            "risk": 0,
+            "math": 0,
+        },
+
+        "last_issue_signature": "",
+        "stagnant_revision_count": 0,
+
+        "fundamentals_report": "",
+        "fundamentals_sources": [],
+        "financial_snapshot": {},
+
+        "annual_revenue": 0.0,
+        "annual_operating_cash_flow": 0.0,
+        "annual_capex": 0.0,
+        "annual_free_cash_flow": 0.0,
+        "annual_fiscal_year": "",
+
+        "latest_ytd_revenue": 0.0,
+        "latest_ytd_operating_cash_flow": 0.0,
+        "latest_ytd_capex": 0.0,
+        "latest_ytd_period": "",
+        "latest_ytd_months": 0,
+
+        "prior_ytd_revenue": 0.0,
+        "prior_ytd_operating_cash_flow": 0.0,
+        "prior_ytd_capex": 0.0,
+        "prior_ytd_period": "",
+        "prior_ytd_months": 0,
+
+        "ttm_revenue": 0.0,
+        "ttm_operating_cash_flow": 0.0,
+        "ttm_capex": 0.0,
+        "ttm_free_cash_flow": 0.0,
+        "ttm_period": "",
+
+        "revenue": 0.0,
+        "operating_cash_flow": 0.0,
+        "capex": 0.0,
+        "free_cash_flow": 0.0,
+        "financial_basis": "",
+        "financial_period": "",
+
+        "market_report": "",
+        "market_sources": [],
+        "market_snapshot": {},
+        "market_price": 0.0,
+        "market_cap": 0.0,
+        "market_cap_date": "",
+
+        "shares_outstanding": 0.0,
+
+        "competition_report": "",
+        "competition_sources": [],
+
+        "risk_report": "",
+        "risk_sources": [],
+
+        "merged_sources": [],
+        "evidence_summary": "",
+        "evidence_completeness": 0.0,
+
+        "valuation_assumptions": {},
+        "assumption_summary": "",
+
+        "valuation_result": {},
+        "valuation_summary": "",
+
+        "deterministic_verification": {},
+        "critic_result": {},
+        "research_issues": [],
+        "verification_summary": "",
+        "critique": "",
+        "needs_revision": False,
+
+        "status": "running",
+        "final_answer": "",
+    }
