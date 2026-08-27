@@ -70,12 +70,10 @@ def make_initial_state(
         "market_price": 0.0,
         "market_cap": 0.0,
         "market_cap_date": "",
-
         "shares_outstanding": 0.0,
 
         "competition_report": "",
         "competition_sources": [],
-
         "risk_report": "",
         "risk_sources": [],
 
@@ -83,9 +81,21 @@ def make_initial_state(
         "evidence_summary": "",
         "evidence_completeness": 0.0,
 
+        "strategy_metrics": {},
+        "strategy_graham": {},
+        "strategy_buffett": {},
+        "strategy_lynch": {},
+        "strategy_fisher": {},
+        "strategy_greenblatt": {},
+        "strategy_hohn": {},
+        "strategy_druckenmiller": {},
+        "strategy_tepper": {},
+        "strategy_klarman": {},
+        "strategy_ackman_smith": {},
+        "strategy_screening": {},
+
         "valuation_assumptions": {},
         "assumption_summary": "",
-
         "valuation_result": {},
         "valuation_summary": "",
 
