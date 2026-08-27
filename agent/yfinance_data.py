@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 import yfinance as yf
@@ -44,13 +43,11 @@ def _history_date(history) -> str:
             return ""
 
         value = history.index[-1]
-
         if hasattr(value, "date"):
             return value.date().isoformat()
 
         text = str(value)
         return text[:10] if len(text) >= 10 else ""
-
     except Exception:
         return ""
 
@@ -59,44 +56,20 @@ def _history_close(history):
     try:
         if history is None or history.empty or "Close" not in history.columns:
             return None
-
         return _positive_float(history["Close"].iloc[-1])
-
     except Exception:
         return None
 
 
-def normalize_yfinance_snapshot(
-    *,
-    ticker: str,
-    fast_info: Any,
-    history: Any,
-) -> dict:
+def normalize_yfinance_snapshot(*, ticker: str, fast_info: Any, history: Any) -> dict:
     symbol = ticker.strip().upper()
 
-    price = _positive_float(
-        _read_value(
-            fast_info,
-            "last_price",
-        )
-    )
-
+    price = _positive_float(_read_value(fast_info, "last_price"))
     if price is None:
         price = _history_close(history)
 
-    market_cap_raw = _positive_float(
-        _read_value(
-            fast_info,
-            "market_cap",
-        )
-    )
-
-    shares = _positive_float(
-        _read_value(
-            fast_info,
-            "shares",
-        )
-    )
+    market_cap_raw = _positive_float(_read_value(fast_info, "market_cap"))
+    shares = _positive_float(_read_value(fast_info, "shares"))
 
     market_cap_usd_b = (
         market_cap_raw / 1_000_000_000
@@ -105,50 +78,16 @@ def normalize_yfinance_snapshot(
     )
 
     market_cap_method = "provider_reported"
+    if market_cap_usd_b is None and price is not None and shares is not None:
+        market_cap_usd_b = price * shares / 1_000_000_000
+        market_cap_method = "derived: Yahoo price * Yahoo shares"
 
-    if (
-        market_cap_usd_b is None
-        and price is not None
-        and shares is not None
-    ):
-        market_cap_usd_b = (
-            price * shares / 1_000_000_000
-        )
-        market_cap_method = (
-            "derived: yfinance price * yfinance shares"
-        )
-
-    currency = str(
-        _read_value(
-            fast_info,
-            "currency",
-        )
-        or ""
-    ).upper()
-
-    exchange = str(
-        _read_value(
-            fast_info,
-            "exchange",
-        )
-        or ""
-    )
-
-    timezone_name = str(
-        _read_value(
-            fast_info,
-            "timezone",
-        )
-        or ""
-    )
-
+    currency = str(_read_value(fast_info, "currency") or "").upper()
+    exchange = str(_read_value(fast_info, "exchange") or "")
+    timezone_name = str(_read_value(fast_info, "timezone") or "")
     as_of_date = _history_date(history)
 
-    usd_compatible = currency in {
-        "",
-        "USD",
-    }
-
+    usd_compatible = currency in {"", "USD"}
     complete = bool(
         usd_compatible
         and price is not None
@@ -160,11 +99,7 @@ def normalize_yfinance_snapshot(
         "ok": complete,
         "ticker": symbol,
         "price_usd": price if usd_compatible else None,
-        "market_cap_usd_b": (
-            market_cap_usd_b
-            if usd_compatible
-            else None
-        ),
+        "market_cap_usd_b": market_cap_usd_b if usd_compatible else None,
         "shares_outstanding": shares,
         "currency": currency,
         "exchange": exchange,
@@ -172,22 +107,15 @@ def normalize_yfinance_snapshot(
         "as_of_time": None,
         "timezone": timezone_name or None,
         "provider": "Yahoo Finance via yfinance",
-        "source_url": YAHOO_QUOTE_URL.format(
-            ticker=symbol,
-        ),
+        "source_url": YAHOO_QUOTE_URL.format(ticker=symbol),
         "source_quality": "secondary_non_official",
         "status": "verified" if complete else "unavailable",
         "market_cap_method": market_cap_method,
-        "notes": (
-            "Non-official Yahoo Finance data accessed via yfinance. "
-            "SEC EDGAR remains canonical for financial statements."
-        ),
+        "notes": "Yahoo Finance market data accessed via yfinance.",
     }
 
 
-def fetch_yfinance_market_snapshot(
-    ticker: str,
-) -> dict:
+def fetch_yfinance_market_snapshot(ticker: str) -> dict:
     symbol = ticker.strip().upper()
 
     if not symbol:
@@ -200,7 +128,6 @@ def fetch_yfinance_market_snapshot(
     try:
         security = yf.Ticker(symbol)
         fast_info = security.fast_info
-
         history = security.history(
             period="5d",
             interval="1d",
@@ -208,13 +135,11 @@ def fetch_yfinance_market_snapshot(
             actions=False,
         )
 
-        result = normalize_yfinance_snapshot(
+        return normalize_yfinance_snapshot(
             ticker=symbol,
             fast_info=fast_info,
             history=history,
         )
-
-        return result
 
     except Exception as exc:
         return {
@@ -222,13 +147,8 @@ def fetch_yfinance_market_snapshot(
             "ticker": symbol,
             "status": "unavailable",
             "provider": "Yahoo Finance via yfinance",
-            "source_url": YAHOO_QUOTE_URL.format(
-                ticker=symbol,
-            ),
+            "source_url": YAHOO_QUOTE_URL.format(ticker=symbol),
             "source_quality": "secondary_non_official",
             "error": f"{exc.__class__.__name__}: {exc}",
-            "notes": (
-                "yfinance failed; caller should fall back to the existing "
-                "web-search market-data path."
-            ),
+            "notes": "Yahoo market lookup failed; caller may use independent web fallback.",
         }
