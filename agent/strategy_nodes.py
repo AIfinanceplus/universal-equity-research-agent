@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from agent.strategy_calibration import calibrate_strategy_result
 from agent.strategy_screening import (
-    STRATEGIES,
     build_strategy_metrics,
     evaluate_strategy,
 )
@@ -14,7 +14,9 @@ def strategy_metrics_node(state: dict):
 
 
 def _screen(state: dict, name: str, key: str):
-    result = evaluate_strategy(name, state.get("strategy_metrics", {}))
+    metrics = state.get("strategy_metrics", {})
+    result = evaluate_strategy(name, metrics)
+    result = calibrate_strategy_result(name, metrics, result)
     print(f"STRATEGY {name}: {result['verdict']} coverage={result['coverage']:.2f}")
     return {key: result}
 
@@ -104,8 +106,9 @@ def strategy_screening_hub_node(state: dict):
         ],
         "methodology": (
             "Rules are the user-supplied strategy criteria. "
-            "PASS/FAIL is deterministic where data is available. "
-            "UNKNOWN is used instead of guessing when the system lacks a reliable field."
+            "PASS/FAIL is deterministic where reliable data and the required lookback exist. "
+            "UNKNOWN is used instead of guessing when history, cross-sectional ranks, "
+            "dynamic market data or qualitative evidence is unavailable."
         ),
     }
 
