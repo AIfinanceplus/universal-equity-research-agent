@@ -1,4 +1,13 @@
+from agent.strategy_calibration import calibrate_strategy_result
 from agent.strategy_screening import evaluate_strategy
+
+
+def screen(name, metrics):
+    return calibrate_strategy_result(
+        name,
+        metrics,
+        evaluate_strategy(name, metrics),
+    )
 
 
 def base_metrics():
@@ -48,17 +57,29 @@ def base_metrics():
 def main():
     metrics = base_metrics()
 
-    graham = evaluate_strategy("graham", metrics)
+    graham = screen("graham", metrics)
     assert graham["verdict"] == "PASS", graham
     assert graham["counts"]["fail"] == 0
     print("PASS: Graham screen can produce a full deterministic PASS.")
 
-    buffett = evaluate_strategy("buffett", metrics)
+    short_history = base_metrics()
+    short_history["history_years"] = dict(short_history["history_years"])
+    short_history["history_years"]["net_income"] = 8
+    short_history["history_years"]["dividends"] = 8
+    short_history["net_income_positive_years"] = 8
+    short_history["dividend_positive_years"] = 8
+    short_graham = screen("graham", short_history)
+    by_id = {rule["id"]: rule for rule in short_graham["rules"]}
+    assert by_id["profit_10y"]["status"] == "unknown"
+    assert by_id["dividends"]["status"] == "unknown"
+    print("PASS: insufficient SEC lookback becomes UNKNOWN, not false FAIL.")
+
+    buffett = screen("buffett", metrics)
     assert buffett["counts"]["pass"] >= 6
     assert any(rule["status"] == "unknown" for rule in buffett["rules"])
     print("PASS: Buffett screen preserves unavailable ROIC as UNKNOWN.")
 
-    druck = evaluate_strategy("druckenmiller", metrics)
+    druck = screen("druckenmiller", metrics)
     assert druck["verdict"] == "INSUFFICIENT_DATA"
     assert druck["counts"]["unknown"] == len(druck["rules"])
     print("PASS: dynamic Druckenmiller fields are not hallucinated.")
@@ -66,10 +87,17 @@ def main():
     weak = dict(metrics)
     weak["fcf_yield"] = 0.01
     weak["debt_to_equity"] = 1.5
-    buffett_fail = evaluate_strategy("buffett", weak)
+    buffett_fail = screen("buffett", weak)
     assert buffett_fail["verdict"] == "FAIL"
     assert buffett_fail["counts"]["fail"] >= 2
     print("PASS: deterministic threshold violations produce FAIL.")
+
+    negative_pe = base_metrics()
+    negative_pe["pe_3yr_avg_eps"] = -10.0
+    neg_graham = screen("graham", negative_pe)
+    pe_rule = next(rule for rule in neg_graham["rules"] if rule["id"] == "pe3")
+    assert pe_rule["status"] == "fail"
+    print("PASS: negative P/E cannot accidentally pass an upper-bound rule.")
 
 
 if __name__ == "__main__":
