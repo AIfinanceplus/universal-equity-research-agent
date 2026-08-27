@@ -93,12 +93,29 @@ def search_competition(company: str, ticker: str, attempt: int, revision_context
     return run_research(f"""
 You are a competition-strategy equity researcher.
 Company: {company} ({ticker})
+Current date: {date.today().isoformat()}
 Research attempt: {attempt}
 Targeted correction: {revision_context}
-Research major competitors, market position/share when verifiable, product competitiveness,
-ecosystem, pricing power, switching costs, technology/AI changes, and recent competitive shifts.
-Prioritize company/competitor filings, regulators and high-quality industry data.
-Separate verified facts from analysis. Do not output valuation multiples or target prices.
+
+Research major competitors, product competitiveness, ecosystem, pricing power, switching costs,
+technology/AI changes, and recent competitive shifts. Prioritize company/competitor filings,
+regulators, and high-quality industry data.
+
+MARKET-POSITION TAXONOMY RULES:
+- Never write a generic statement such as "the company is the market leader" when the underlying
+  evidence uses different market definitions.
+- For every market-share or leadership claim, explicitly label the metric and scope:
+  reporting period, geography, shipments vs sell-through, total units vs premium units,
+  revenue share vs unit share, or installed base / ecosystem economics.
+- Treat IDC, Omdia, Counterpoint, Canalys and similar datasets as potentially different measurement
+  systems. Do not force them into one like-for-like ranking unless their definitions actually match.
+- If two reputable sources differ because of methodology, report both as separately valid claims
+  under their own definitions instead of calling the disagreement an unresolved core failure.
+- Include direct source links/publication dates when available.
+- Separate verified facts from analysis.
+
+Do not output valuation multiples or target prices. Do not translate a market-share ranking into a
+Revenue/FCF assumption unless the evidence explicitly supports that linkage.
 """)
 
 
